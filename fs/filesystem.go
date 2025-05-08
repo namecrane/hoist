@@ -52,8 +52,10 @@ func New(c hoist.Client, opts ...Option) *FileSystem {
 
 type FileSystem struct {
 	client hoist.Client
+
 	// Used for writing files, can be any afero.Fs
 	tempFs afero.Fs
+
 	// Used for reading files when they request "ReadAt"
 	readCache fscache.Cache
 }
@@ -241,10 +243,17 @@ func (c *FileSystem) Rename(oldName, newName string) error {
 		return err
 	}
 
-	if folder != nil {
-		_, subName := c.client.ParsePath(oldName)
+	oldBase, _ := c.client.ParsePath(oldName)
+	base, name := c.client.ParsePath(newName)
 
-		return c.client.MoveFolder(context.Background(), folder.Path, subName)
+	if folder != nil {
+		var newParent string
+
+		if base != oldBase {
+			newParent = base
+		}
+
+		return c.client.MoveFolder(context.Background(), folder.Path, newParent, name)
 	} else if file != nil {
 		return c.client.RenameFile(context.Background(), file.ID, path.Base(newName))
 	}

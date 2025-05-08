@@ -20,7 +20,6 @@ type ReaderAtSeeker interface {
 type CraneFile struct {
 	fs            *FileSystem
 	mode          int
-	id            string
 	path          string
 	name          string
 	file          *hoist.File
@@ -29,6 +28,14 @@ type CraneFile struct {
 	temporaryFile afero.File
 	readStream    io.ReadCloser
 	readAtStream  fscache.ReadAtCloser
+}
+
+func (c *CraneFile) ID() string {
+	if c.file != nil {
+		return c.file.ID
+	}
+
+	return ""
 }
 
 func (c *CraneFile) ReadAt(p []byte, off int64) (n int, err error) {
@@ -176,7 +183,7 @@ func (c *CraneFile) openReadStream() error {
 }
 
 func (c *CraneFile) openReadAtStream() error {
-	read, write, err := c.fs.readCache.Get(c.id)
+	read, write, err := c.fs.readCache.Get(c.ID())
 
 	if err != nil {
 		return err

@@ -53,7 +53,7 @@ type FileClient interface {
 	RenameFile(ctx context.Context, fileID string, name string) error
 	EditFile(ctx context.Context, fileID string, params EditFileParams) error
 	GetLink(ctx context.Context, fileID string) (string, string, error)
-	MoveFolder(ctx context.Context, folder, newParentFolder string) error
+	MoveFolder(ctx context.Context, folder, newParentFolder, newName string) error
 }
 
 type diskUsageResponse struct {
@@ -644,14 +644,19 @@ type patchFolderRequest struct {
 	NewParentFolder string `json:"newParentFolder,omitempty"`
 }
 
-func (c *client) MoveFolder(ctx context.Context, folder, newParentFolder string) error {
-	_, subfolder := c.ParsePath(folder)
+// MoveFolder moves/renames a folder. If you do not wish to move the folder, send newParentFolder as ""
+func (c *client) MoveFolder(ctx context.Context, folder, newParentFolder, newName string) error {
+	if newName == "" {
+		_, subfolder := c.ParsePath(newParentFolder)
+
+		newName = subfolder
+	}
 
 	res, err := c.doRequest(ctx, http.MethodPost, apiPatchFolder, patchFolderRequest{
 		//ParentFolder:    parent,
 		Folder:          folder,
 		NewParentFolder: newParentFolder,
-		NewFolderName:   subfolder,
+		NewFolderName:   newName,
 	})
 
 	if err != nil {
