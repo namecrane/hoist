@@ -127,7 +127,13 @@ func (c *CraneFile) uploadFile() error {
 		return err
 	}
 
-	_, err = c.fs.client.ChunkedUpload(context.Background(), f, path.Join(c.path, c.name), stat.Size())
+	file, err := c.fs.client.ChunkedUpload(context.Background(), f, path.Join(c.path, c.name), stat.Size())
+
+	if err != nil {
+		return err
+	}
+
+	c.file = file
 
 	return err
 }
