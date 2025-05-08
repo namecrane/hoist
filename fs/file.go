@@ -143,6 +143,11 @@ func (c *CraneFile) uploadFile() error {
 }
 
 func (c *CraneFile) Read(p []byte) (n int, err error) {
+	// If something tries to read from a file that does not exist, make sure we catch it
+	if c.file == nil {
+		return -1, io.ErrUnexpectedEOF
+	}
+
 	// Support cached reads
 	if c.readAtStream != nil {
 		return c.readAtStream.Read(p)
@@ -284,13 +289,11 @@ func (c *CraneFileInfo) Size() int64 {
 }
 
 func (c *CraneFileInfo) Mode() fs.FileMode {
-	defaultMode := fs.FileMode(0644)
-
 	if c.folder != nil {
-		return defaultMode | fs.ModeDir
+		return 0755 | fs.ModeDir
 	}
 
-	return defaultMode
+	return fs.FileMode(0644)
 }
 
 func (c *CraneFileInfo) ModTime() time.Time {
@@ -298,7 +301,7 @@ func (c *CraneFileInfo) ModTime() time.Time {
 		return c.file.DateAdded
 	}
 
-	return time.Time{}
+	return time.Now()
 }
 
 func (c *CraneFileInfo) IsDir() bool {
