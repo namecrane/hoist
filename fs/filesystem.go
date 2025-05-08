@@ -220,6 +220,7 @@ func (c *FileSystem) OpenFile(name string, flag int, perm os.FileMode) (afero.Fi
 	p, sub := c.client.ParsePath(name)
 
 	return &CraneFile{
+		mode:   flag,
 		fs:     c,
 		path:   p,
 		name:   sub,

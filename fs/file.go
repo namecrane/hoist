@@ -19,6 +19,7 @@ type ReaderAtSeeker interface {
 
 type CraneFile struct {
 	fs            *FileSystem
+	mode          int
 	id            string
 	path          string
 	name          string
@@ -82,8 +83,7 @@ func (c *CraneFile) Readdirnames(n int) ([]string, error) {
 }
 
 func (c *CraneFile) Sync() error {
-	//TODO implement me
-	panic("implement me")
+	return nil
 }
 
 func (c *CraneFile) Truncate(size int64) error {
@@ -92,8 +92,7 @@ func (c *CraneFile) Truncate(size int64) error {
 }
 
 func (c *CraneFile) WriteString(s string) (ret int, err error) {
-	//TODO implement me
-	panic("implement me")
+	return c.Write([]byte(s))
 }
 
 func (c *CraneFile) Close() error {
@@ -119,7 +118,12 @@ func (c *CraneFile) uploadFile() error {
 		return err
 	}
 
-	defer f.Close()
+	defer func() {
+		_ = f.Close()
+
+		// Clean up the file when we're done
+		_ = c.tempFs.Remove(c.temporaryFile.Name())
+	}()
 
 	stat, err := f.Stat()
 
