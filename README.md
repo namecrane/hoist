@@ -15,7 +15,7 @@ Planned:
 ## Installation
 
 ```bash
-go install github.com/namecrane/hoist
+go get github.com/namecrane/hoist
 ```
 
 ## Example
