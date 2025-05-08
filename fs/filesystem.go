@@ -242,7 +242,9 @@ func (c *FileSystem) Rename(oldName, newName string) error {
 	}
 
 	if folder != nil {
-		// rename folder
+		_, subName := c.client.ParsePath(oldName)
+
+		return c.client.MoveFolder(context.Background(), folder.Path, subName)
 	} else if file != nil {
 		return c.client.RenameFile(context.Background(), file.ID, path.Base(newName))
 	}
