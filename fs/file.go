@@ -249,6 +249,11 @@ func (c *CraneFile) Write(p []byte) (n int, err error) {
 	return c.temporaryFile.Write(p)
 }
 
+// NewFileInfo creates a new CraneFileInfo struct, used for reading directories/etc
+func NewFileInfo(file *hoist.File, folder *hoist.Folder) *CraneFileInfo {
+	return &CraneFileInfo{file: file, folder: folder}
+}
+
 type CraneFileInfo struct {
 	file   *hoist.File
 	folder *hoist.Folder

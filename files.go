@@ -22,6 +22,7 @@ const (
 	maxChunkSize       = 15 * 1024 * 1024 // 15 MB
 
 	apiUpload       = "api/upload"
+	apiDiskUsage    = "api/v1/filestorage/disk-usage-summary"
 	apiFiles        = "api/v1/filestorage/files"
 	apiDeleteFiles  = "api/v1/filestorage/delete-files"
 	apiMoveFiles    = "api/v1/filestorage/move-files"
@@ -36,6 +37,7 @@ const (
 )
 
 type FileClient interface {
+	DiskUsageSummary(ctx context.Context) (*DiskUsage, error)
 	ChunkedUpload(ctx context.Context, in io.Reader, filePath string, fileSize int64) (*File, error)
 	ParsePath(path string) (basePath, lastSegment string)
 	GetFolders(ctx context.Context) ([]Folder, error)
@@ -52,6 +54,46 @@ type FileClient interface {
 	EditFile(ctx context.Context, fileID string, params EditFileParams) error
 	GetLink(ctx context.Context, fileID string) (string, string, error)
 	MoveFolder(ctx context.Context, folder, newParentFolder string) error
+}
+
+type diskUsageResponse struct {
+	defaultResponse
+	DiskUsage *DiskUsage `json:"diskUsage"`
+}
+
+type DiskUsage struct {
+	Allowed          int64 `json:"allowed"`
+	Used             int64 `json:"used"`
+	Mailboxes        int64 `json:"mailboxes"`
+	Appointments     int64 `json:"appointmentsUsed"`
+	Contacts         int64 `json:"contactsUsed"`
+	Notes            int64 `json:"notesUsed"`
+	Tasks            int64 `json:"tasksUsed"`
+	FileStorage      int64 `json:"fileStorageUsed"`
+	MeetingWorkspace int64 `json:"meetingWorkspaceUsed"`
+	ChatFiles        int64 `json:"chatFilesUsed"`
+}
+
+// DiskUsageSummary returns the disk usage information from the API
+func (c *client) DiskUsageSummary(ctx context.Context) (*DiskUsage, error) {
+	res, err := c.doRequest(ctx, http.MethodGet, apiDiskUsage, nil)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("%w: %d", ErrUnexpectedStatus, res.StatusCode)
+	}
+
+	var response diskUsageResponse
+
+	if err := res.Decode(&response); err != nil {
+		return nil, err
+	}
+
+	// Root folder is response.Folder
+	return response.DiskUsage, nil
 }
 
 // uploadChunk uploads a chunk, then waits for it to be accepted.
