@@ -2,15 +2,20 @@ package fs
 
 import (
 	"context"
+	"errors"
 	"github.com/google/uuid"
 	"github.com/namecrane/hoist"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 	"gopkg.in/djherbis/fscache.v0"
 	"io"
 	"io/fs"
+	"os"
 	"path"
 	"time"
 )
+
+var ErrEmptyFile = errors.New("file is empty")
 
 type ReaderAtSeeker interface {
 	io.ReaderAt
@@ -30,6 +35,14 @@ type CraneFile struct {
 	readAtStream  fscache.ReadAtCloser
 }
 
+func (c *CraneFile) Open(mode int) error {
+	// When creating a new file, explicitly open a temp file
+	if mode&os.O_CREATE != 0 {
+		return c.openTempFile()
+	}
+	return nil
+}
+
 func (c *CraneFile) ID() string {
 	if c.file != nil {
 		return c.file.ID
@@ -43,10 +56,21 @@ func (c *CraneFile) ReadAt(p []byte, off int64) (n int, err error) {
 		return -1, ErrNotSupported
 	}
 
+	log.WithFields(log.Fields{
+		"file":   c.path + "/" + c.name,
+		"size":   len(p),
+		"offset": off,
+	}).Debug("Reading file bytes")
+
 	if c.readAtStream == nil {
+		log.WithField("path", c.path).Debug("Opening cache read file")
 		if err := c.openReadAtStream(); err != nil {
 			return -1, err
 		}
+	}
+
+	if off >= c.file.Size {
+		return 0, io.EOF
 	}
 
 	return c.readAtStream.ReadAt(p, off)
@@ -115,27 +139,37 @@ func (c *CraneFile) Close() error {
 }
 
 func (c *CraneFile) uploadFile() error {
-	if err := c.temporaryFile.Close(); err != nil {
+	var err error
+
+	if err = c.temporaryFile.Close(); err != nil {
 		return err
 	}
 
-	f, err := c.tempFs.Open(c.temporaryFile.Name())
-
-	if err != nil {
-		return err
-	}
+	var f afero.File
 
 	defer func() {
-		_ = f.Close()
+		if f != nil {
+			_ = f.Close()
+		}
 
 		// Clean up the file when we're done
 		_ = c.tempFs.Remove(c.temporaryFile.Name())
 	}()
 
+	f, err = c.tempFs.Open(c.temporaryFile.Name())
+
+	if err != nil {
+		return err
+	}
+
 	stat, err := f.Stat()
 
 	if err != nil {
 		return err
+	}
+
+	if stat.Size() == 0 {
+		return ErrEmptyFile
 	}
 
 	file, err := c.fs.client.ChunkedUpload(context.Background(), f, path.Join(c.path, c.name), stat.Size())
@@ -183,6 +217,10 @@ func (c *CraneFile) openReadStream() error {
 }
 
 func (c *CraneFile) openReadAtStream() error {
+	if c.fs.readCache == nil {
+		return ErrNotSupported
+	}
+
 	read, write, err := c.fs.readCache.Get(c.ID())
 
 	if err != nil {
@@ -198,7 +236,18 @@ func (c *CraneFile) openReadAtStream() error {
 		defer func() {
 			defer c.readStream.Close()
 
-			_, err = io.Copy(write, c.readStream)
+			n, err := io.Copy(write, c.readStream)
+
+			if err != nil {
+				log.WithError(err).Warning("Failed to copy to cache")
+				return
+			}
+
+			log.WithFields(log.Fields{
+				"file":   c.path + "/" + c.name,
+				"copied": n,
+				"size":   c.file.Size,
+			}).Debug("Copied file to cache")
 		}()
 	}
 
@@ -208,6 +257,12 @@ func (c *CraneFile) openReadAtStream() error {
 }
 
 func (c *CraneFile) Seek(offset int64, whence int) (int64, error) {
+	log.WithFields(log.Fields{
+		"file":   c.path + "/" + c.name,
+		"whence": whence,
+		"offset": offset,
+	}).Debug("Seek")
+
 	return -1, ErrNotSupported
 }
 
@@ -292,7 +347,7 @@ func (c *CraneFileInfo) Size() int64 {
 		return c.file.Size
 	}
 
-	return 0
+	return -1
 }
 
 func (c *CraneFileInfo) Mode() fs.FileMode {

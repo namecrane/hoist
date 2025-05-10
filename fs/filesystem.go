@@ -64,12 +64,19 @@ type FileSystem struct {
 func (c *FileSystem) Create(name string) (afero.File, error) {
 	path, sub := c.client.ParsePath(name)
 
-	return &CraneFile{
+	f := &CraneFile{
 		fs:     c,
 		path:   path,
 		name:   sub,
 		tempFs: c.tempFs,
-	}, nil
+	}
+
+	// Explicitly call create so that the file is uploaded regardless at the end
+	if err := f.Open(os.O_CREATE); err != nil {
+		return nil, err
+	}
+
+	return f, nil
 }
 
 func (c *FileSystem) Open(name string) (afero.File, error) {
@@ -108,6 +115,19 @@ func (c *FileSystem) Chown(name string, uid, gid int) error {
 }
 
 func (c *FileSystem) Chtimes(name string, atime time.Time, mtime time.Time) error {
+	_, file, err := c.client.Find(context.Background(), name)
+
+	if err != nil {
+		return err
+	}
+
+	// Only supported for files
+	if file != nil {
+		if !mtime.IsZero() {
+			return c.client.MoveFiles(context.Background(), file.FolderPath, file.ID)
+		}
+	}
+
 	return ErrNotSupported
 }
 
@@ -221,7 +241,7 @@ func (c *FileSystem) OpenFile(name string, flag int, perm os.FileMode) (afero.Fi
 
 	p, sub := c.client.ParsePath(name)
 
-	return &CraneFile{
+	f := &CraneFile{
 		mode:   flag,
 		fs:     c,
 		path:   p,
@@ -229,7 +249,13 @@ func (c *FileSystem) OpenFile(name string, flag int, perm os.FileMode) (afero.Fi
 		file:   file,
 		folder: folder,
 		tempFs: c.tempFs,
-	}, nil
+	}
+
+	if err := f.Open(flag); err != nil {
+		return nil, err
+	}
+
+	return f, nil
 }
 
 func (c *FileSystem) RemoveAll(name string) error {
@@ -243,7 +269,7 @@ func (c *FileSystem) Rename(oldName, newName string) error {
 		return err
 	}
 
-	oldBase, _ := c.client.ParsePath(oldName)
+	oldBase, oldFileName := c.client.ParsePath(oldName)
 	base, name := c.client.ParsePath(newName)
 
 	if folder != nil {
@@ -255,7 +281,17 @@ func (c *FileSystem) Rename(oldName, newName string) error {
 
 		return c.client.MoveFolder(context.Background(), folder.Path, newParent, name)
 	} else if file != nil {
-		return c.client.RenameFile(context.Background(), file.ID, path.Base(newName))
+		if base != oldBase {
+			err = c.client.MoveFiles(context.Background(), base, file.ID)
+
+			if err != nil {
+				return err
+			}
+		}
+
+		if name != oldFileName {
+			return c.client.RenameFile(context.Background(), file.ID, name)
+		}
 	}
 
 	return nil

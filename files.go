@@ -166,7 +166,14 @@ func (c *client) ChunkedUpload(ctx context.Context, in io.Reader, filePath strin
 	contextData := string(contextBytes)
 
 	// Calculate total chunks
-	totalChunks := int(math.Ceil(float64(fileSize) / maxChunkSize))
+	var totalChunks int
+
+	// Allow creation of empty files
+	if fileSize == 0 {
+		totalChunks = 1
+	} else {
+		totalChunks = int(math.Ceil(float64(fileSize) / maxChunkSize))
+	}
 
 	remaining := fileSize
 
