@@ -16,6 +16,8 @@ var (
 	ErrExpiredRefreshToken = errors.New("refresh token expired")
 )
 
+const defaultUsername = "default"
+
 type Store interface {
 	// Set stores an authenticated user's access and refresh tokens
 	Set(username string, auth AuthResponse)
@@ -172,14 +174,17 @@ func (am *authManager) GetToken(ctx context.Context) (string, error) {
 	if am.store != nil {
 		username := ctx.Value("username")
 
+		var usernameStr string
+
 		if username == nil {
-			return "", ErrNoToken
-		}
+			usernameStr = defaultUsername
+		} else {
+			var ok bool
+			usernameStr, ok = username.(string)
 
-		usernameStr, ok := username.(string)
-
-		if !ok {
-			return "", ErrUnexpectedType
+			if !ok {
+				return "", ErrUnexpectedType
+			}
 		}
 
 		var err error
