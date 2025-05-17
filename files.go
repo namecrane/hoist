@@ -457,10 +457,6 @@ type folderRequest struct {
 func (c *client) CreateFolder(ctx context.Context, folder string) (*Folder, error) {
 	parent, subfolder := c.ParsePath(folder)
 
-	if subfolder == "" {
-		return nil, ErrNoFolder
-	}
-
 	res, err := c.doRequest(ctx, http.MethodPost, apiPutFolder, folderRequest{
 		ParentFolder: parent,
 		Folder:       subfolder,
@@ -490,10 +486,6 @@ func (c *client) CreateFolder(ctx context.Context, folder string) (*Folder, erro
 // DeleteFolder deletes a specified folder by name
 func (c *client) DeleteFolder(ctx context.Context, folder string) error {
 	parent, subfolder := c.ParsePath(folder)
-
-	if folder == "" || parent == "" || subfolder == "" {
-		return ErrNoFolder
-	}
 
 	res, err := c.doRequest(ctx, http.MethodPost, apiDeleteFolder, folderRequest{
 		ParentFolder: parent,

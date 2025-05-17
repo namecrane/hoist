@@ -35,6 +35,13 @@ func WithAuthClient(client *http.Client) AuthManagerOption {
 	}
 }
 
+// WithAuthStore sets the auth store for caching/storage of auth tokens
+func WithAuthStore(store Store) AuthManagerOption {
+	return func(manager *authManager) {
+		manager.store = store
+	}
+}
+
 type AuthManager interface {
 	Authenticate(ctx context.Context, username, password, twoFactorCode string) error
 	RefreshToken(ctx context.Context) error
