@@ -140,8 +140,34 @@ func (am *authManager) RefreshToken(ctx context.Context) error {
 
 	url := fmt.Sprintf("%s/api/v1/auth/refresh-token", am.apiURL)
 
+	response := am.lastResponse
+
+	if am.store != nil {
+		username := ctx.Value("username")
+
+		var usernameStr string
+
+		if username == nil {
+			usernameStr = defaultUsername
+		} else {
+			var ok bool
+			usernameStr, ok = username.(string)
+
+			if !ok {
+				return ErrUnexpectedType
+			}
+		}
+
+		var err error
+		response, err = am.store.Get(usernameStr)
+
+		if err != nil {
+			return err
+		}
+	}
+
 	res, err := doHttpRequest(ctx, am.client, http.MethodPost, url, refreshRequest{
-		Token: am.lastResponse.RefreshToken,
+		Token: response.RefreshToken,
 	})
 
 	if err != nil {
@@ -152,16 +178,16 @@ func (am *authManager) RefreshToken(ctx context.Context) error {
 		return fmt.Errorf("unexpected status code %d", res.StatusCode)
 	}
 
-	var response AuthResponse
+	var newResponse AuthResponse
 
-	if err := res.Decode(&response); err != nil {
+	if err := res.Decode(&newResponse); err != nil {
 		return fmt.Errorf("failed to decode refresh response: %w", err)
 	}
 
 	if am.store != nil {
-		am.store.Set(response.Username, response)
+		am.store.Set(response.Username, newResponse)
 	} else {
-		am.lastResponse = &response
+		am.lastResponse = &newResponse
 	}
 
 	return nil
