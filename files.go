@@ -41,7 +41,7 @@ type FileClient interface {
 	ChunkedUpload(ctx context.Context, in io.Reader, filePath string, fileSize int64) (*File, error)
 	ParsePath(path string) (basePath, lastSegment string)
 	GetFolders(ctx context.Context) ([]Folder, error)
-	GetFolder(ctx context.Context, folder string) (*Folder, error)
+	GetFolder(ctx context.Context, folder string, opts ...FolderOpt) (*Folder, error)
 	GetFiles(ctx context.Context, ids ...string) ([]File, error)
 	DeleteFiles(ctx context.Context, ids ...string) error
 	DownloadFile(ctx context.Context, id string, opts ...RequestOpt) (io.ReadCloser, error)
@@ -276,11 +276,40 @@ func (c *client) GetFolders(ctx context.Context) ([]Folder, error) {
 	return response.Folder.Flatten(), nil
 }
 
+// FolderOpt allows defining folder request options
+type FolderOpt func(f *folderRequest)
+
+// WithStartIndex sets the start index of a folder request
+func WithStartIndex(index int) FolderOpt {
+	return func(f *folderRequest) {
+		f.StartIndex = &index
+	}
+}
+
+// WithCount specifies the number of items to return in a folder request
+func WithCount(count int) FolderOpt {
+	return func(f *folderRequest) {
+		f.Count = &count
+	}
+}
+
 // GetFolder returns a single folder
-func (c *client) GetFolder(ctx context.Context, folder string) (*Folder, error) {
-	res, err := c.doRequest(ctx, http.MethodPost, apiFolder, folderRequest{
-		Folder: folder,
-	})
+func (c *client) GetFolder(ctx context.Context, folder string, opts ...FolderOpt) (*Folder, error) {
+	var zero int
+
+	req := folderRequest{
+		Folder:     folder,
+		StartIndex: &zero,
+		Count:      &zero,
+	}
+
+	for _, opt := range opts {
+		opt(&req)
+	}
+
+	// omitempty will check that it's a pointer and if set, pass it. Meaning we can pass 0,
+	// without it being ignored as empty.
+	res, err := c.doRequest(ctx, http.MethodPost, apiFolder, req)
 
 	if err != nil {
 		return nil, err
@@ -451,6 +480,8 @@ func (c *client) Find(ctx context.Context, file string) (*Folder, *File, error) 
 type folderRequest struct {
 	ParentFolder string `json:"parentFolder,omitempty"`
 	Folder       string `json:"folder"`
+	StartIndex   *int   `json:"startIndex,omitempty"`
+	Count        *int   `json:"count,omitempty"`
 }
 
 // CreateFolder creates a new remote folder

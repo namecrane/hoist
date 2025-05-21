@@ -122,7 +122,15 @@ func (am *authManager) Authenticate(ctx context.Context, username, password, two
 
 	// Store the token and expiration time
 	if am.store != nil {
-		am.store.Set(username, response)
+		ctxUsername, err := contextUsername(ctx)
+
+		if err != nil {
+			return err
+		}
+
+		// We set ctxUsername here because `username` might not match
+		// This only sets a username if necessary
+		am.store.Set(ctxUsername, response)
 	} else {
 		am.lastResponse = &response
 	}
@@ -143,23 +151,13 @@ func (am *authManager) RefreshToken(ctx context.Context) error {
 	response := am.lastResponse
 
 	if am.store != nil {
-		username := ctx.Value("username")
+		username, err := contextUsername(ctx)
 
-		var usernameStr string
-
-		if username == nil {
-			usernameStr = defaultUsername
-		} else {
-			var ok bool
-			usernameStr, ok = username.(string)
-
-			if !ok {
-				return ErrUnexpectedType
-			}
+		if err != nil {
+			return err
 		}
 
-		var err error
-		response, err = am.store.Get(usernameStr)
+		response, err = am.store.Get(username)
 
 		if err != nil {
 			return err
@@ -198,23 +196,13 @@ func (am *authManager) GetToken(ctx context.Context) (string, error) {
 	response := am.lastResponse
 
 	if am.store != nil {
-		username := ctx.Value("username")
+		username, err := contextUsername(ctx)
 
-		var usernameStr string
-
-		if username == nil {
-			usernameStr = defaultUsername
-		} else {
-			var ok bool
-			usernameStr, ok = username.(string)
-
-			if !ok {
-				return "", ErrUnexpectedType
-			}
+		if err != nil {
+			return "", err
 		}
 
-		var err error
-		response, err = am.store.Get(usernameStr)
+		response, err = am.store.Get(username)
 
 		if err != nil {
 			return "", err
@@ -249,4 +237,16 @@ func (am *authManager) GetToken(ctx context.Context) (string, error) {
 
 func (am *authManager) String() string {
 	return "Hoist Auth Manager"
+}
+
+func contextUsername(ctx context.Context) (string, error) {
+	if v := ctx.Value("username"); v != nil {
+		if str, ok := v.(string); ok {
+			return str, nil
+		}
+
+		return "", ErrUnexpectedType
+	}
+
+	return defaultUsername, nil
 }
