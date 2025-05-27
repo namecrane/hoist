@@ -97,7 +97,16 @@ func (c *client) doRequest(ctx context.Context, method, path string, body any, o
 
 // ParsePath parses the last segment off the specified path, representing either a file or directory
 func (c *client) ParsePath(path string) (basePath, lastSegment string) {
+	return ParsePath(path)
+}
+
+// ParsePath parses the last segment off the specified path, representing either a file or directory
+func ParsePath(path string) (basePath, lastSegment string) {
 	trimmedPath := strings.Trim(path, "/")
+
+	// Normalize path
+	trimmedPath = strings.Replace(trimmedPath, "//", "/", -1)
+	trimmedPath = strings.Replace(trimmedPath, "\\", "/", -1)
 
 	segments := strings.Split(trimmedPath, "/")
 
