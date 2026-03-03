@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
+	log "github.com/sirupsen/logrus"
 )
 
 var (
@@ -44,10 +46,17 @@ func WithAuthStore(store Store) AuthManagerOption {
 	}
 }
 
+func WithClientID(clientID string) AuthManagerOption {
+	return func(manager *authManager) {
+		manager.clientID = clientID
+	}
+}
+
 type AuthManager interface {
 	Authenticate(ctx context.Context, username, password, twoFactorCode string) error
 	RefreshToken(ctx context.Context) error
 	GetToken(ctx context.Context) (string, error)
+	ClientID() string
 }
 
 // AuthManager manages the authentication token.
@@ -57,6 +66,7 @@ type authManager struct {
 	apiURL       string
 	lastResponse *AuthResponse
 	store        Store
+	clientID     string
 }
 
 // NewAuthManager initializes the AuthManager.
@@ -70,10 +80,15 @@ func NewAuthManager(apiURL string, opts ...AuthManagerOption) AuthManager {
 		opt(a)
 	}
 
+	if a.clientID == "" {
+		a.clientID = "HOIST-" + uuid.New().String()
+	}
+
 	return a
 }
 
 type authRequest struct {
+	ClientID      string `json:"clientId"`
 	Username      string `json:"username"`
 	Password      string `json:"password"`
 	TwoFactorCode string `json:"twoFactorCode"`
@@ -100,6 +115,7 @@ func (am *authManager) Authenticate(ctx context.Context, username, password, two
 	url := fmt.Sprintf("%s/api/v1/auth/authenticate-user", am.apiURL)
 
 	res, err := doHttpRequest(ctx, am.client, http.MethodPost, url, authRequest{
+		ClientID:      am.clientID,
 		Username:      username,
 		Password:      password,
 		TwoFactorCode: twoFactorCode,
@@ -108,6 +124,8 @@ func (am *authManager) Authenticate(ctx context.Context, username, password, two
 	if err != nil {
 		return err
 	}
+
+	defer res.Close()
 
 	if res.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status code %d", res.StatusCode)
@@ -139,7 +157,8 @@ func (am *authManager) Authenticate(ctx context.Context, username, password, two
 }
 
 type refreshRequest struct {
-	Token string `json:"token"`
+	ClientID string `json:"clientId"`
+	Token    string `json:"token"`
 }
 
 func (am *authManager) RefreshToken(ctx context.Context) error {
@@ -165,15 +184,18 @@ func (am *authManager) RefreshToken(ctx context.Context) error {
 	}
 
 	res, err := doHttpRequest(ctx, am.client, http.MethodPost, url, refreshRequest{
-		Token: response.RefreshToken,
+		ClientID: am.clientID,
+		Token:    response.RefreshToken,
 	})
 
 	if err != nil {
 		return err
 	}
 
+	defer res.Close()
+
 	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected status code %d", res.StatusCode)
+		return fmt.Errorf("unexpected status code %d: %s", res.StatusCode, string(res.Data()))
 	}
 
 	var newResponse AuthResponse
@@ -233,6 +255,11 @@ func (am *authManager) GetToken(ctx context.Context) (string, error) {
 	log.Debug("Using existing token")
 
 	return response.Token, nil
+}
+
+// ClientID returns either the set or generated client id
+func (am *authManager) ClientID() string {
+	return am.clientID
 }
 
 func (am *authManager) String() string {
