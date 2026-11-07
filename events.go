@@ -3,9 +3,10 @@ package hoist
 import (
 	"context"
 	"errors"
+	"time"
+
 	"github.com/namecrane/hoist/events"
 	"github.com/philippseith/signalr"
-	"time"
 )
 
 var ErrAuthFailed = errors.New("auth failed")

@@ -236,15 +236,15 @@ func (am *authManager) GetToken(ctx context.Context) (string, error) {
 		return "", ErrNoToken
 	}
 
-	// Handle if we can't use our refresh token
-	if response.RefreshTokenExpiration.Before(time.Now()) {
-		log.Debug(am, "Refresh token expired")
-		return "", ErrExpiredRefreshToken
-	}
-
 	// Give us a 5 minute grace period to prevent race conditions/issues
 	if response.TokenExpiration.Before(time.Now().Add(5 * time.Minute)) {
 		log.Debug("Access token expires soon, need to refresh")
+
+		// Handle if we can't use our refresh token
+		if response.RefreshTokenExpiration.Before(time.Now()) {
+			log.Debug(am, "Refresh token expired")
+			return "", ErrExpiredRefreshToken
+		}
 
 		// Refresh token
 		if err := am.RefreshToken(ctx); err != nil {
